@@ -2,7 +2,7 @@ services:
   # Entorno de trabajo con Python y Spark pre-instalado
   workspace:
     build: .
-    container_name: bigdata_workspace
+    container_name: bigdata_workspace1
     ports:
       - "8888:8888" # Jupyter Lab
       - "4040:4040" # Panel de control de Spark
@@ -16,7 +16,7 @@ services:
   # Base de Datos NoSQL
   database:
     image: mongo:latest
-    container_name: bigdata_mongodb
+    container_name: bigdata_mongodb1
     ports:
       - "27017:27017"
     volumes:
@@ -25,7 +25,7 @@ services:
   # EL SERVICIO QUE FALTA PARA EL PUERTO 8081
   admin-db:
     image: mongo-express:latest
-    container_name: bigdata_ui
+    container_name: bigdata_ui1
     restart: always
     ports:
       - "8081:8081"
