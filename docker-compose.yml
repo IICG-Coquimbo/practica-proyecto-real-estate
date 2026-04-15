@@ -1,26 +1,52 @@
 services:
-  # Entorno de trabajo con Python y Spark pre-instalado
+  # Contenedor principal con Jupyter, Spark y entorno visual
   workspace:
-    build: .
+    build: .                      # Construye la imagen usando el Dockerfile local
     container_name: bigdata_workspace1
+    platform: linux/amd64
+
     ports:
-      - "8888:8888" # Jupyter Lab
-      - "4040:4040" # Panel de control de Spark
+      - "8888:8888"               # Jupyter Lab
+      - "4040:4040"               # Interfaz web de Spark
+      - "5900:5900"               # Acceso VNC al escritorio
+      - "6080:6080"               # Acceso noVNC desde navegador
+
     volumes:
-      - .:/home/jovyan/work
+      - .:/home/jovyan/work       # Monta la carpeta del proyecto dentro del contenedor
+
     environment:
-      - JUPYTER_TOKEN=
-      - JUPYTER_PASSWORD=""
-      - JUPYTER_ALLOW_INSECURE_WRITES=true
+      - JUPYTER_TOKEN=            
+      - JUPYTER_PASSWORD=         
+      - JUPYTER_ALLOW_INSECURE_WRITES=true  
+      - DISPLAY=:99               
+    
+    shm_size: "2gb"               # Evita fallos del navegador Selenium
+    depends_on:
+      - mongodb
 
-  # Base de Datos NoSQL
-  database:
+  # Contenedor de base de datos MongoDB
+  mongodb:
     image: mongo:latest
-    container_name: bigdata_mongodb1
+    container_name: bigdata_mongodb2
+    platform: linux/amd64
     ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
+      - "27017:27017"             
 
+    volumes:
+      - mongo_data:/data/db       # Guarda los datos de forma persistente
+      
+  # Interfaz web para visualizar la base de datos en puerto 8081
+  admin-db:
+    image: mongo-express:latest
+    container_name: bigdata_ui
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://mongodb:27017/
+    depends_on:
+      - mongodb
+
+# Volumen persistente para MongoDB
 volumes:
   mongo_data:
