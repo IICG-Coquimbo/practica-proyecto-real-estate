@@ -1,1 +1,2 @@
-supervisord.*
+supervisord.log
+supervisord.pid
