@@ -1,0 +1,53 @@
+services:
+  # Contenedor principal con Jupyter, Spark y entorno visual
+  realestate_workspace:
+    build: .                      
+    container_name: realestate_workspace
+    platform: linux/amd64
+
+    ports:
+      - "8888:8888"               # Jupyter Lab
+      - "4040:4040"               # Interfaz web de Spark
+      - "5900:5900"               # Acceso VNC al escritorio
+      - "6080:6080"               # Acceso noVNC desde navegador
+
+    volumes:
+      - .:/home/jovyan/work       # Monta la carpeta del proyecto
+
+    environment:
+      - JUPYTER_TOKEN=            
+      - JUPYTER_PASSWORD=         
+      - JUPYTER_ALLOW_INSECURE_WRITES=true  
+      - DISPLAY=:99               
+    
+    shm_size: "2gb"               # Evita fallos del navegador Selenium
+    depends_on:
+      - bd_realestate
+
+  # Contenedor de base de datos MongoDB
+  bd_realestate:
+    image: mongo:latest
+    container_name: bd_realestate
+    platform: linux/amd64
+    ports:
+      - "27017:27017"             
+
+    volumes:
+      - realestate_mongo_data:/data/db       # Volumen exclusivo para este proyecto
+      
+  # Interfaz web para visualizar la base de datos
+  realestate_ui:
+    image: mongo-express:latest
+    container_name: realestate_ui
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      # OJO: Se actualizó para apuntar al nuevo nombre del servicio BD
+      - ME_CONFIG_MONGODB_URL=mongodb://bd_realestate:27017/
+    depends_on:
+      - bd_realestate
+
+# Volumen persistente para MongoDB aislado
+volumes:
+  realestate_mongo_data:
