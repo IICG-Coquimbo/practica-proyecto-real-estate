@@ -29,7 +29,7 @@ def ejecutar_extraccion():
     driver = None        
     total_guardados = 0
     
-    datos_totales_companero = [] # MODIFICADO: Lista maestra
+    datos_totales_marco = []
 
     # --- PASO 1: CONFIGURACIÓN DEL NAVEGADOR ---
     options = Options()
@@ -188,7 +188,7 @@ def ejecutar_extraccion():
 
             # Al terminar la tanda de 100
             if datos_tanda:
-                datos_totales_companero.extend(datos_tanda) 
+                datos_totales_marco.extend(datos_tanda) 
                 total_guardados += len(datos_tanda)
                 print(f"💾 ¡Tanda guardada exitosamente! Respaldos actuales: {total_guardados}.")
             
