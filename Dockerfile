@@ -27,8 +27,12 @@ RUN wget https://repo1.maven.org/maven2/org/mongodb/spark/mongo-spark-connector_
     && wget https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-sync/4.11.1/mongodb-driver-sync-4.11.1.jar -P /usr/local/spark/jars/
 
 # 5. Configuración de visualización (noVNC)
+RUN apt-get update && apt-get install -y dos2unix
+
 COPY start-vnc.sh /usr/local/bin/start-vnc.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+RUN dos2unix /usr/local/bin/start-vnc.sh
 RUN chmod +x /usr/local/bin/start-vnc.sh
 
 ENV DISPLAY=:99
