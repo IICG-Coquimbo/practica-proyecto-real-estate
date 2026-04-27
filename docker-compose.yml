@@ -17,25 +17,21 @@ services:
     networks:
       - bigdata_net
 
+  mongodb:
+    image: mongo:6
+    container_name: BigData_MongoDB
+    ports:
+      - "27017:27017"
+    restart: always
+    networks:
+      - bigdata_net
   visualizer:
     image: mongo-express
     container_name: BigData_Visualizer
     ports:
-<<<<<<< HEAD
-      - "8081:8081" #abre la interfaz gráfica de docker
-    environment:
-      # Se conecta al servicio 'database' definido arriba
-      - ME_CONFIG_MONGODB_URL=mongodb://database:27017/
-    depends_on:
-      - database
-      
-# Volumen persistente para MongoDB
-volumes:
-  mongo_data:
-=======
       - "8081:8081"   # Mongo Express
     environment:
-      - ME_CONFIG_MONGODB_URL=mongodb+srv://usuario:password@cluster0.kthdyh1.mongodb.net/?retryWrites=true&w=majority
+      - ME_CONFIG_MONGODB_URL=mongodb+srv://bd_realestate:abc123456@c-realestate.xyfip8o.mongodb.net/?retryWrites=true&w=majority
       - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
       - VC_NODE_TLS_REJECT_UNAUTHORIZED=0
     dns:
@@ -59,4 +55,3 @@ networks:
   bigdata_net:
     driver: bridge
     name: BigData_Network_UCN
->>>>>>> 847d964ca522bae566d49d84acff60a9bc264f0c
