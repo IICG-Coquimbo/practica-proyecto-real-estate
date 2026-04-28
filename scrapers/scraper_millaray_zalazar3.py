@@ -13,7 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def ejecutar_extraccion():
+def scraper3():
 
     # --- CONFIGURACIÓN PÁGINAS A SCRAPEAR ---
     PAGINA_INICIO = 12
@@ -41,7 +41,7 @@ def ejecutar_extraccion():
     options.add_experimental_option('useAutomationExtension', False)
 
     catalogo_urls = []
-    datos_finales = []
+    datos_3 = []
     driver = None
 
     try:
@@ -90,25 +90,31 @@ def ejecutar_extraccion():
                         else: continue 
 
                         try:
+                            imagen_url = bloque.find_element(By.CSS_SELECTOR, "img.poly-component__picture").get_attribute("src")
+                        except:
+                            imagen_url = "Sin Imagen"
+                            
+                        try:
                             p_text = bloque.find_element(By.CSS_SELECTOR, ".poly-price__current").get_attribute("textContent")
                         except:
                             p_text = bloque.find_element(By.CSS_SELECTOR, ".poly-component__price").get_attribute("textContent")
                         
-                        v_limpio = p_text.replace("$", "").replace(".", "").replace(",", "").replace("\n", "").strip()
-                        precio = float(v_limpio) if v_limpio.isdigit() else 0.0
+                        precio = p_text.strip()
+
 
                         if url != "Sin URL" and precio > 0:
                             catalogo_urls.append({
                                 "url": url,
                                 "identificador": titulo, 
                                 "ubicacion": ubicacion,
-                                "precio": precio        
+                                "precio": precio,
+                                "imagen": imagen_url
                             })
                     except: continue
             except Exception as e:
                 print(f"Error en carga de catálogo: {e}")
             
-            time.sleep(random.uniform(3.0, 5.5))
+            time.sleep(random.uniform(1.3, 2.9))
 
         # FASE 2: INSPECCIÓN PROFUNDA
         print(f"\n--- [FASE 2] Iniciando buceo profundo en {len(catalogo_urls)} publicaciones ---")
@@ -130,6 +136,7 @@ def ejecutar_extraccion():
                 "terraza": 0,
                 "gimnasio": 0,
                 "lavanderia": 0,
+                "imagen": propiedad["imagen"]
                 "url": propiedad["url"] 
             }
 
@@ -139,8 +146,8 @@ def ejecutar_extraccion():
                 texto_pagina = driver.find_element(By.TAG_NAME, "body").get_attribute("textContent").lower()
                 
                 if "publicación pausada" in texto_pagina or "publicación finaliz" in texto_pagina:
-                    print("   -> Publicación ya no disponible. Valor seteado a 0.0")
-                    registro["precio"] = 0.0
+                    print("   -> Publicación ya no disponible")
+                    registro["precio"] = "Inactivo"
                 else:
                     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ui-pdp-collapsable__container")))
                     filas_tabla = driver.find_elements(By.CSS_SELECTOR, ".andes-table__row")
@@ -161,17 +168,18 @@ def ejecutar_extraccion():
                             if nums and int(nums[0]) > 0: registro["estacionamiento"] = int(nums[0])
                             elif any(x in texto_fila for x in ["sí", "si"]): registro["estacionamiento"] = 1
                         elif "piscina" in texto_fila and any(x in texto_fila for x in ["sí", "si"]): registro["piscina"] = 1
-                        elif "quincho" in texto_fila and any(x in texto_fila for x in ["sí", "si"]): registro["quincho"] = 1
+                        elif ("quincho" in texto_fila or "parrilla" in texto_fila) and "sí" in texto_fila: registro["quincho"] = 1
                         elif "terraza" in texto_fila and any(x in texto_fila for x in ["sí", "si"]): registro["terraza"] = 1
                         elif "gimnasio" in texto_fila and any(x in texto_fila for x in ["sí", "si"]): registro["gimnasio"] = 1
                         elif "lavander" in texto_fila and any(x in texto_fila for x in ["sí", "si"]): registro["lavanderia"] = 1
+           
             except Exception:
                 print(f"   -> No se pudo leer la tabla detallada. Valor a 0.0")
-                registro["precio"] = 0.0
+                registro["precio"] = "Error"
             
-            datos_finales.append(registro)
+            datos_3.append(registro)
             driver.delete_all_cookies() 
-            time.sleep(random.uniform(2.8, 5.2))
+            time.sleep(random.uniform(1.4, 2.9))
 
     except Exception as e:
         print(f"Error crítico: {e}")
@@ -180,4 +188,4 @@ def ejecutar_extraccion():
             driver.quit()
             print("\nNavegador Selenium cerrado.")
     
-    return datos_finales 
+    return datos_3 
