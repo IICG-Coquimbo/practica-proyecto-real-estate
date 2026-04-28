@@ -1,6 +1,6 @@
 import os
 import time
-import re
+import re  
 import json
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -15,9 +15,10 @@ def ejecutar_extraccion():
     Ejecuta el pipeline completo de extracción de Yapo.cl:
     1. Recolección de 500 enlaces base e imagen miniatura.
     2. Minería profunda por propiedad (extrayendo foto de alta calidad e indicadores).
-    3. Retorno de lista conservando etiquetas originales con datos en bruto.
+    3. Retorno de lista conservando etiquetas originales con datos en bruto (sin descripción larga).
     """
     # --- PASO 0: LIMPIEZA TOTAL Y REPARACIÓN ---
+    # FORZAR LA PANTALLA PARA noVNC
     os.environ["DISPLAY"] = ":99"  
     os.system("pkill -9 chrome")
     os.system("pkill -9 chromedriver")
@@ -34,7 +35,7 @@ def ejecutar_extraccion():
     driver = None        
     total_guardados = 0
     
-    # Lista maestra que acumulará todos los registros para enviarlos al script maestro
+    # Lista maestra que acumulará todos los registros para enviarlos a PySpark
     datos_totales_jalil = [] 
 
     # --- PASO 1: CONFIGURACIÓN DEL NAVEGADOR ---
@@ -47,6 +48,7 @@ def ejecutar_extraccion():
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
     try:
+        # Se agrega webdriver_manager para garantizar compatibilidad de versiones
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         print(f"🚀 Navegador iniciado. Fase 1: Buscando {META_REGISTROS} enlaces...")
 
@@ -55,7 +57,7 @@ def ejecutar_extraccion():
         
         nivel_pagina = 1
 
-        # Bucle WHILE: Sigue buscando páginas hasta llegar a la meta
+        # Bucle WHILE: Sigue buscando páginas hasta llegar a 500 enlaces
         while len(propiedades_basicas) < META_REGISTROS:
             print(f"\n--- 📄 Extrayendo tarjetas - Página {nivel_pagina} (Llevamos {len(propiedades_basicas)} enlaces) ---")
 
@@ -74,7 +76,7 @@ def ejecutar_extraccion():
 
             for bloque in bloques:
                 if len(propiedades_basicas) >= META_REGISTROS:
-                    break 
+                    break # Rompe si ya llegó a la meta en medio de una página
 
                 try:
                     nombre = bloque.find_element(By.CSS_SELECTOR, ".d3-ad-tile__title").get_attribute("textContent")
@@ -90,6 +92,7 @@ def ejecutar_extraccion():
 
                     enlace = bloque.find_element(By.CSS_SELECTOR, "a.d3-ad-tile__description").get_attribute("href")
 
+                    # Extracción de la miniatura para respaldo
                     try:
                         imagen_miniatura = bloque.find_element(By.TAG_NAME, "img").get_attribute("src")
                     except:
@@ -120,6 +123,7 @@ def ejecutar_extraccion():
                 except Exception:
                     continue
 
+            # Si aún faltan registros, pasamos a la siguiente página
             if len(propiedades_basicas) < META_REGISTROS:
                 try:
                     btn_sig = driver.find_element(By.XPATH, "//a[contains(@class, 'pagination') and contains(text(), 'Siguiente')] | //a[contains(@class, 'next')]")
@@ -149,9 +153,11 @@ def ejecutar_extraccion():
                         EC.presence_of_element_located((By.CSS_SELECTOR, ".d3-property-about__text"))
                     )
                     
+                    # Leemos la descripción para sacar las banderas, pero NO la guardamos en el diccionario final
                     desc_larga = driver.find_element(By.CSS_SELECTOR, ".d3-property-about__text").get_attribute("textContent").strip()
                     texto_busqueda = (prop["titulo"] + " " + desc_larga).lower()
                     
+                    # --- Captura de Imagen ---
                     imagen_final = "Sin imagen"
                     try:
                         img_element = driver.find_element(By.CSS_SELECTOR, "img.d3-hero-carousel__photo")
@@ -167,6 +173,7 @@ def ejecutar_extraccion():
                     except:
                         imagen_final = prop["imagen_fallback"]
 
+                    # --- EXTRACCIÓN MÍNIMA (PARA MANTENER ETIQUETAS, PERO VALORES EN BRUTO) ---
                     m2_match = re.search(r'(\d+)\s*(?:m2|mts|metros)', texto_busqueda)
                     m2_crudo = m2_match.group(0) if m2_match else "0"
 
@@ -176,34 +183,38 @@ def ejecutar_extraccion():
                         "titulo": prop["titulo"],
                         "ubicacion": prop["ubicacion"],
                         
-                        # ETIQUETAS ORIGINALES PRESERVADAS EN BRUTO
+                        # ETIQUETAS ORIGINALES PRESERVADAS
                         "m2": m2_crudo, 
                         "precio": prop["precio_crudo"], 
                         "dormitorios": prop["dormitorios_crudo"], 
                         "banos": prop["banos_crudo"], 
                         "estacionamiento": prop["estac_crudo"], 
                         
+                        # Banderas en texto
                         "piscina": "1" if "piscina" in texto_busqueda else "0",
                         "quincho": "1" if "quincho" in texto_busqueda or "asador" in texto_busqueda else "0",
                         "terraza": "1" if "terraza" in texto_busqueda or "balcon" in texto_busqueda or "balcón" in texto_busqueda else "0",
                         "gimnasio": "1" if "gimnasio" in texto_busqueda or "gym" in texto_busqueda else "0",
                         "lavanderia": "1" if "lavanderia" in texto_busqueda or "lavandería" in texto_busqueda or "logia" in texto_busqueda else "0",
                         
+                        # Adiciones
                         "imagen": imagen_final,
                         "enlace": prop["enlace"]
                     }
 
                     datos_tanda.append(registro_limpio_pero_crudo)
-                    time.sleep(2) 
+                    time.sleep(2) # Pausa normal entre páginas
                     
                 except Exception as e:
                     continue
 
+            # Al terminar la tanda
             if datos_tanda:
-                datos_totales_jalil.extend(datos_tanda) 
+                datos_totales_jalil.extend(datos_tanda) # Acumulamos en la lista maestra
                 total_guardados += len(datos_tanda)
                 print(f"💾 ¡Tanda guardada exitosamente! Respaldos actuales: {total_guardados}.")
             
+            # Pausa larga anti-bot (solo si no es la última tanda)
             if i + TAMANO_TANDA < len(propiedades_basicas):
                 print("⏱️ Iniciando pausa de 60 segundos para evitar bloqueos por parte del servidor...")
                 time.sleep(60)
@@ -221,13 +232,18 @@ def ejecutar_extraccion():
             except:
                 pass
                 
-    # LA LISTA PURA SE RETORNA AL SCRIPT MAESTRO
+    # Retornamos la LISTA MAESTRA
     return datos_totales_jalil
 
 # =======================================================
-# BLOQUE DE PRUEBA LOCAL (Solo se ejecuta si corres este archivo directamente)
+# BLOQUE DE EJECUCIÓN DIRECTA
 # =======================================================
 if __name__ == "__main__":
-    print("Iniciando script de scraping de manera local...")
+    print("Iniciando script de scraping desde terminal...")
     registros = ejecutar_extraccion()
-    print(f"Proceso finalizado. Total retornado en la lista: {len(registros)}")
+    print(f"Proceso finalizado. Total guardado: {len(registros)}")
+    
+    # Opcional: Imprimir un registro para confirmar cómo queda
+    if registros:
+        print("\n🔍 MUESTRA DEL PRIMER REGISTRO EXTRAÍDO:")
+        print(json.dumps(registros[0], indent=4, ensure_ascii=False))
