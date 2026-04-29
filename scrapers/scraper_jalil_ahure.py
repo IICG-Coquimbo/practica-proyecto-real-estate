@@ -26,7 +26,7 @@ def ejecutar_extraccion():
     print("🧹 Limpieza completada. Pantalla virtual configurada.")
 
     # --- VARIABLES GENERALES ---
-    RESPONSABLE_EXTRACCION = "Jalil" 
+    RESPONSABLE_EXTRACCION = "Jalil Ahure" 
     META_REGISTROS = 500
     TAMANO_TANDA = 100
 

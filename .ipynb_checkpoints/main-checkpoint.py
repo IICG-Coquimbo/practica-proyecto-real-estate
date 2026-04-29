@@ -1,95 +1,136 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lower, trim
-# 1. Importamos TODOS los scrapers del equipo
-from scrapers import (
-    scraper_jalil_ahure, 
-    scraper_constanza_torres, 
-    scraper_millaray_zalazar1, 
-    scraper_millaray_zalazar2, 
-    scraper_millaray_zalazar3
-)
-
-print("⏳ Iniciando la extracción web MASIVA. ¡Ve por un café, esto tomará tiempo!...")
-
-# 2. Ejecución secuencial de los scrapers
-print("\n--- INICIANDO EXTRACCIÓN JALIL (YAPO) ---")
-data_jalil = scraper_jalil_ahure.ejecutar_extraccion()
-
-print("\n--- INICIANDO EXTRACCIÓN CONSTANZA (MITULA) ---")
-data_constanza = scraper_constanza_torres.ejecutar_extraccion()
-
-print("\n--- INICIANDO EXTRACCIÓN MILLARAY - PARTE 1 (PORTAL INMOBILIARIO) ---")
-data_millaray_1 = scraper_millaray_zalazar1.ejecutar_extraccion()
-
-print("\n--- INICIANDO EXTRACCIÓN MILLARAY - PARTE 2 (PORTAL INMOBILIARIO) ---")
-data_millaray_2 = scraper_millaray_zalazar2.ejecutar_extraccion()
-
-print("\n--- INICIANDO EXTRACCIÓN MILLARAY - PARTE 3 (PORTAL INMOBILIARIO) ---")
-data_millaray_3 = scraper_millaray_zalazar3.ejecutar_extraccion()
-
-print(f"\n✅ Extracciones finalizadas.")
-print(f"Resultados -> Jalil: {len(data_jalil)} | Constanza: {len(data_constanza)} | Millaray: {len(data_millaray_1) + len(data_millaray_2) + len(data_millaray_3)}")
-
 # ==============================================================================
-# PUNTO DE CONTROL FLEXIBLE (AVISA PERO CONTINÚA)
-# ==============================================================================
-fallos = []
-if not data_jalil: fallos.append("Jalil (Yapo)")
-if not data_constanza: fallos.append("Constanza (Mitula)")
-if not data_millaray_1: fallos.append("Millaray Parte 1")
-if not data_millaray_2: fallos.append("Millaray Parte 2")
-if not data_millaray_3: fallos.append("Millaray Parte 3")
-
-if fallos:
-    print(f"\n⚠️ ADVERTENCIA: La extracción está incompleta. Los siguientes scrapers devolvieron 0 registros:")
-    for f in fallos:
-        print(f"   - {f}")
-    print("⏭️ Continuando de todas formas. Se unificarán y guardarán los datos de los scrapers exitosos.")
+# PROYECTO BIG DATA - GRUPO 2 (REAL ESTATE)
+# Script Integrador y Estandarizador Principal (main.py)
 # ==============================================================================
 
-# 3. Iniciamos PySpark 
-URI_MONGO = "mongodb+srv://bd_realestate:abc123456@c-realestate.xyfip8o.mongodb.net/RealEstate.Consolidado?retryWrites=true&w=majority"
+import json
+import re
+import certifi
+from pymongo import MongoClient
 
-spark = SparkSession.builder \
-    .appName("IntegradoraBigData_Inmobiliaria") \
-    .config("spark.mongodb.output.uri", URI_MONGO) \
-    .getOrCreate()
+# Importamos las funciones de cada integrante
+from scrapers.scraper_constanza_torres import ejecutar_extracción as scraper_constanza
+from scrapers.scraper_millaray_zalazar import scraper_prueba as scraper_millaray
+from scrapers.scraper_prueba import ejecutar_extraccion as scraper_jalil
+from scrapers.scraper_melany_torres import ejecutar_extraccion as scraper_melany
 
-# 4. Convertimos a DataFrames de Spark (A prueba de listas vacías)
-print("\n⚙️ PySpark: Transformando listas a DataFrames...")
-df_jalil = spark.createDataFrame(data_jalil) if data_jalil else None
-df_constanza = spark.createDataFrame(data_constanza) if data_constanza else None
-df_m1 = spark.createDataFrame(data_millaray_1) if data_millaray_1 else None
-df_m2 = spark.createDataFrame(data_millaray_2) if data_millaray_2 else None
-df_m3 = spark.createDataFrame(data_millaray_3) if data_millaray_3 else None
+def limpiar_numero(valor):
+    """
+    Purificador Universal: Toma cualquier texto (ej. '$ 450.000', '2 m2', 'Sí')
+    y devuelve estrictamente el número entero.
+    """
+    if isinstance(valor, bool): return 1 if valor else 0
+    if isinstance(valor, (int, float)): return int(valor)
+    if not valor: return 0
+    
+    texto = str(valor).lower().strip()
+    if texto in ["sin información", "error", "inactiva", "sin miniatura", "none", "sin imagen"]:
+        return 0
+    if texto in ["sí", "si", "true", "yes"]:
+        return 1
+        
+    # Reemplazamos puntos y comas de miles antes de extraer
+    texto_sin_separadores = texto.replace('.', '').replace(',', '')
+    nums = re.findall(r'\d+', texto_sin_separadores)
+    return int(nums[0]) if nums else 0
 
-# 5. Unimos todos los DataFrames que SÍ tengan datos
-lista_dfs = [df for df in [df_jalil, df_constanza, df_m1, df_m2, df_m3] if df is not None]
+def estandarizar_registro(reg):
+    """
+    Mapea el diccionario original de cualquier integrante a un esquema ÚNICO.
+    Garantiza que la base de datos sea perfecta.
+    """
+    # Identificar si la llave se llamaba 'banos' o 'baños'
+    banos_raw = reg.get("baños", reg.get("banos", 0))
+    # Identificar URL vs Enlace
+    url_raw = reg.get("url", reg.get("enlace", "Sin URL"))
+    
+    return {
+        "responsable": reg.get("responsable", "Desconocido"),
+        "fecha_extraccion": reg.get("fecha_extraccion", reg.get("fecha_captura", "")),
+        "titulo": str(reg.get("titulo", "")).strip(),
+        "ubicacion": str(reg.get("ubicacion", "")).strip(),
+        
+        # Numéricos limpios (int)
+        "precio": limpiar_numero(reg.get("precio", 0)),
+        "m2": limpiar_numero(reg.get("m2", 0)),
+        "dormitorios": limpiar_numero(reg.get("dormitorios", 0)),
+        "baños": limpiar_numero(banos_raw),
+        
+        # Booleanos numéricos (1 o 0)
+        "estacionamiento": 1 if limpiar_numero(reg.get("estacionamiento", 0)) > 0 else 0,
+        "piscina": 1 if limpiar_numero(reg.get("piscina", 0)) > 0 else 0,
+        "quincho": 1 if limpiar_numero(reg.get("quincho", 0)) > 0 else 0,
+        "terraza": 1 if limpiar_numero(reg.get("terraza", 0)) > 0 else 0,
+        "gimnasio": 1 if limpiar_numero(reg.get("gimnasio", 0)) > 0 else 0,
+        "lavanderia": 1 if limpiar_numero(reg.get("lavanderia", 0)) > 0 else 0,
+        
+        # Textos finales
+        "imagen": str(reg.get("imagen", "Sin imagen")),
+        "url": str(url_raw)
+    }
 
-# Solo se detendrá si ABSOLUTAMENTE TODOS fallaron
-if not lista_dfs:
-    print("❌ Error Crítico: Ningún scraper devolvió datos. No hay nada que procesar o guardar. Abortando.")
-    spark.stop()
-    exit()
+def ejecutar_pipeline_integrado():
+    print("============================================================")
+    print(" 🚀 INICIANDO PIPELINE INTEGRADOR BIG DATA - GRUPO 2")
+    print("============================================================")
+    
+    datos_crudos = []
 
-df_final = lista_dfs[0]
-for df in lista_dfs[1:]:
-    df_final = df_final.unionByName(df, allowMissingColumns=True)
+    # --- 1. SCRAPER DE CONSTANZA ---
+    print("\n▶️ [1/3] Extrayendo datos: Constanza (Mitula)...")
+    try:
+        data = scraper_constanza()
+        if data: datos_crudos.extend(data)
+    except Exception as e: print(f"❌ Error en Constanza: {e}")
 
-# 6. Limpieza y Transformación en Spark
-print("🧹 PySpark: Iniciando limpieza y eliminación de duplicados...")
-df_limpio = df_final \
-    .dropDuplicates(["enlace"]) \
-    .filter(col("precio") > 1000) \
-    .withColumn("ubicacion", trim(lower(col("ubicacion"))))
+    # --- 2. SCRAPER DE MILLARAY ---
+    print("\n▶️ [2/3] Extrayendo datos: Millaray (Portal Inmobiliario)...")
+    try:
+        data = scraper_millaray()
+        if data: datos_crudos.extend(data)
+    except Exception as e: print(f"❌ Error en Millaray: {e}")
 
-total_limpios = df_limpio.count()
-print(f"📊 Registros unificados, limpios y sin duplicados listos para BD: {total_limpios}")
+    # --- 3. SCRAPER DE JALIL ---
+    print("\n▶️ [3/3] Extrayendo datos: Jalil (Yapo)...")
+    try:
+        data = scraper_jalil()
+        if data: datos_crudos.extend(data)
+    except Exception as e: print(f"❌ Error en Jalil: {e}")
 
-# 7. Subida a MongoDB
-print("☁️ Subiendo datos consolidados a MongoDB Atlas...")
-# Modo "overwrite" para reemplazar toda la base y mantener solo lo fresco
-df_limpio.write.format("mongodb").mode("overwrite").save()
+    # --- 4. SCRAPER DE MELANY ---
+    print("\n▶️ [4/4] Extrayendo datos: Melany (Portal Inmobiliario)...")
+    try:
+        data = scraper_melany()
+        if data: datos_crudos.extend(data)
+    except Exception as e: print(f"❌ Error en Melany: {e}")
 
-print("🎉 ¡INTEGRACIÓN EXITOSA DEL GRUPO 2! Los datos están en la nube.")
-spark.stop()
+    # --- 5. LIMPIEZA UNIVERSAL ---
+    print("\n" + "="*60)
+    print(" 🧼 PURIFICANDO Y ESTANDARIZANDO DATOS...")
+    datos_limpios = [estandarizar_registro(reg) for reg in datos_crudos]
+    print(f" ✅ {len(datos_limpios)} registros fueron formateados exitosamente.")
+
+    # --- 6. SUBIDA A MONGODB ---
+    if datos_limpios:
+        URI_ATLAS = "mongodb+srv://bd_realestate:abc123456@c-realestate.xyfip8o.mongodb.net/?retryWrites=true&w=majority&appName=C-RealEstate"
+        try:
+            print(" 🔌 Conectando a MongoDB Atlas...")
+            client = MongoClient(URI_ATLAS, tlsCAFile=certifi.where())
+            coleccion = client["Proyecto_RealEstate"]["Integracion_Prueba_Grupo2"]
+            coleccion.insert_many(datos_limpios)
+            
+            print(f" 🎉 ¡ÉXITO! {len(datos_limpios)} registros impecables guardados en Atlas.")
+            
+            # Imprimimos 1 registro como evidencia en consola
+            print("\n 🔍 Evidencia de limpieza (Primer registro en la Nube):")
+            ejemplo = datos_limpios[0]
+            if "_id" in ejemplo: ejemplo["_id"] = str(ejemplo["_id"])
+            print(json.dumps(ejemplo, indent=4, ensure_ascii=False))
+            
+        except Exception as e:
+            print(f" ❌ Error conectando a Atlas: {e}")
+    else:
+        print(" ⚠️ No se recolectaron datos para subir.")
+
+if __name__ == "__main__":
+    ejecutar_pipeline_integrado()
