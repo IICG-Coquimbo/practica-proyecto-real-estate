@@ -19,12 +19,27 @@ services:
       - JUPYTER_PASSWORD=         
       - JUPYTER_ALLOW_INSECURE_WRITES=true  
       - DISPLAY=:99               
-    
+      # Fuerza el uso de JupyterLab de forma explícita
+      - JUPYTER_ENABLE_LAB=yes
+
     shm_size: "2gb"               # Evita fallos del navegador Selenium
+    
+    # Reinicia automáticamente si el contenedor falla
+    restart: always
+
+    # DNS de Google para ayudar con la resolución hacia Atlas
+    dns:
+      - 8.8.8.8
+
     depends_on:
       - bd_realestate
+      - realestate_ui
+      - realestate_ui_atlas
 
-  # Contenedor de base de datos MongoDB
+    networks:
+      - realestate_net
+
+  # Contenedor de base de datos MongoDB LOCAL
   bd_realestate:
     image: mongo:latest
     container_name: bd_realestate
@@ -35,19 +50,61 @@ services:
     volumes:
       - realestate_mongo_data:/data/db       # Volumen exclusivo para este proyecto
       
-  # Interfaz web para visualizar la base de datos
+    restart: always
+    
+    networks:
+      - realestate_net
+
+  # Interfaz web para visualizar la base de datos LOCAL (Puerto 8085)
   realestate_ui:
     image: mongo-express:latest
     container_name: realestate_ui
     restart: always
     ports:
-      - "8081:8081"
+      - "8085:8081"
     environment:
-      # OJO: Se actualizó para apuntar al nuevo nombre del servicio BD
       - ME_CONFIG_MONGODB_URL=mongodb://bd_realestate:27017/
+      # Habilita funciones administrativas en mongo-express
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
     depends_on:
       - bd_realestate
+    networks:
+      - realestate_net
+
+  # Interfaz web para visualizar MongoDB ATLAS (Puerto 8082)
+  realestate_ui_atlas:
+    image: mongo-express:latest
+    container_name: realestate_ui_atlas
+    restart: always
+    ports:
+      - "8082:8081"
+    environment:
+      # Reemplaza usuario, password y cluster por tus datos reales de Atlas
+      - ME_CONFIG_MONGODB_URL=mongodb+srv://bd_realestate:abc123456@c-realestate.xyfip8o.mongodb.net/?appName=C-RealEstate
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+    dns:
+      - 8.8.8.8
+    networks:
+      - realestate_net
+
+  # Explorador de archivos del proyecto desde el navegador (Puerto 8083)
+  realestate_filebrowser:
+    image: filebrowser/filebrowser
+    container_name: realestate_filebrowser
+    restart: always
+    ports:
+      - "8083:80"
+    volumes:
+      - .:/srv
+    networks:
+      - realestate_net
 
 # Volumen persistente para MongoDB aislado
 volumes:
   realestate_mongo_data:
+
+# Red personalizada para que todos los servicios se comuniquen ordenadamente
+networks:
+  realestate_net:
+    driver: bridge
+    name: RealEstate_Network
