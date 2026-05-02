@@ -1,3 +1,8 @@
+# ==============================================================================
+# PROYECTO BIG DATA - GRUPO REAL ESTATE
+# Código Yapo.cl (Coquimbo) - Jalil Ahure
+# ==============================================================================
+
 import os
 import time
 import re
@@ -26,7 +31,7 @@ def ejecutar_extraccion():
     print("🧹 Limpieza completada. Pantalla virtual configurada.")
 
     # --- VARIABLES GENERALES ---
-    RESPONSABLE_EXTRACCION = "Jalil" 
+    RESPONSABLE_EXTRACCION = "Jalil Ahure" 
     META_REGISTROS = 500
     TAMANO_TANDA = 100
 
@@ -221,13 +226,30 @@ def ejecutar_extraccion():
             except:
                 pass
                 
+    # ==============================================================================
+    # FASE 3: MOSTRAR LISTA FINAL DE DATOS (REDUCIDO A 3 REGISTROS)
+    # ==============================================================================
+    print(f"\nTotal retornado en la lista: {len(datos_totales_jalil)}")
+    
+    if datos_totales_jalil:
+        print("\n" + "="*80)
+        print(" MUESTRA DE RESULTADOS FINALES (Primeros 3 registros)")
+        print("="*80)
+
+        for idx, dato in enumerate(datos_totales_jalil[:3]):
+            print(f"\n--- REGISTRO {idx + 1} ---")
+            for clave, valor in dato.items():
+                mostrar_valor = valor if valor != "" else "[Vacío / No encontrado]"
+                print(f" • {clave.capitalize():<18}: {mostrar_valor}")
+        
+        print("\n" + "="*80)
+
     # LA LISTA PURA SE RETORNA AL SCRIPT MAESTRO
     return datos_totales_jalil
 
 # =======================================================
-# BLOQUE DE PRUEBA LOCAL (Solo se ejecuta si corres este archivo directamente)
+# BLOQUE DE PRUEBA LOCAL 
 # =======================================================
 if __name__ == "__main__":
     print("Iniciando script de scraping de manera local...")
     registros = ejecutar_extraccion()
-    print(f"Proceso finalizado. Total retornado en la lista: {len(registros)}")
