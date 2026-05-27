@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # 1. El Workspace Principal (Jupyter + Spark + Brave)
+  workspace:
+    build: .
+    platform: linux/amd64  # Necesario para Mac M1
+    container_name: BigData_workspace
+    ports:
+      - "8888:8888"   # Jupyter Lab
+      - "6080:6080"   # Visualización Brave (noVNC)
+      - "4040:4040"   # Spark UI
+    volumes:
+      - .:/home/jovyan/work
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - PYSPARK_SUBMIT_ARGS=--master local[*] pyspark-shell
+      # Credenciales de Atlas integradas para Spark
+      - SPARK_CONF_spark_mongodb_read_connection_uri=mongodb+srv://profe_vannessa:4aBIKZe1BbDgppaL@clusterbigdata.essfoas.mongodb.net/BigData_UCN?retryWrites=true&w=majority
+      - SPARK_CONF_spark_mongodb_write_connection_uri=mongodb+srv://profe_vannessa:4aBIKZe1BbDgppaL@clusterbigdata.essfoas.mongodb.net/BigData_UCN?retryWrites=true&w=majority
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    user: root
+    restart: always
+
+  # 2. Visualizador de Base de Datos (Mongo Express)
+  # Lo mantenemos porque es útil para los alumnos ver la estructura
+  visualizer:
+    image: mongo-express
+    platform: linux/amd64
+    container_name: BigData_Visualizer
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb+srv://profe_vannessa:4aBIKZe1BbDgppaL@clusterbigdata.essfoas.mongodb.net/BigData_UCN?retryWrites=true&w=majority
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=pass_visualizador
+      - VC_NODE_TLS_REJECT_UNAUTHORIZED=0
+    links:
+      - workspace
+    restart: always
+
+  # 3. Visualizador de Archivos (File Browser) - Útil para gestionar CSVs y PDFs
+  filebrowser:
+    image: filebrowser/filebrowser
+    container_name: BigData_FileBrowser
+    platform: linux/amd64
+    ports:
+      - "8082:8082"
+    volumes:
+      - .:/srv
+    environment:
+      - FB_PORT=8082
+    restart: always
+
+networks:
+  default:
+    name: BigData_Network_UCN
