@@ -1,76 +1,85 @@
 services:
-<<<<<<< HEAD
-  # Entorno de trabajo con Python y Spark pre-instalado
-  workspace:
-    image: jupyter/pyspark-notebook:latest
-    container_name: bigdata_workspace
-    ports:
-      - "8888:8888" # Jupyter Lab
-      - "4040:4040" # Panel de control de Spark
+  # ==========================================
+  # CONTENEDOR A: Scraper / Raw Data 
+  # ==========================================
+  realestate_scraper:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: realestate_scraper
+    platform: linux/amd64
+    profiles:                
+      - "extraccion"         
+    env_file:
+      - .env  # Inyección segura de credenciales de Atlas
     volumes:
       - .:/home/jovyan/work
-    environment:
-      - JUPYTER_TOKEN=
-      - JUPYTER_PASSWORD=""
-      - JUPYTER_ALLOW_INSECURE_WRITES=true
+    command: python /home/jovyan/work/main.py  # Ejecuta la extracción automática
+    shm_size: "2gb"  # Previene fallos si usan Selenium
+    restart: on-failure
+    dns:
+      - 8.8.8.8
+    networks:
+      - realestate_net
 
-  # Base de Datos NoSQL
-  database:
-    image: mongo:latest
-    container_name: bigdata_mongodb
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-=======
-  # Contenedor principal con Jupyter, Spark y entorno visual
-  workspace:
-    build: .                      # Construye la imagen usando el Dockerfile local
-    container_name: bigdata_workspace
-
+  # ==========================================
+  # CONTENEDOR B: Processor & Workspace 
+  # ==========================================
+  realestate_workspace:
+    build: .                      
+    container_name: realestate_workspace
+    platform: linux/amd64
+    env_file:
+      - .env  # Inyección segura de variables de entorno para tu EDA
     ports:
       - "8888:8888"               # Jupyter Lab
       - "4040:4040"               # Interfaz web de Spark
       - "5900:5900"               # Acceso VNC al escritorio
       - "6080:6080"               # Acceso noVNC desde navegador
-
     volumes:
-      - .:/home/jovyan/work       # Monta la carpeta del proyecto dentro del contenedor
-
+      - .:/home/jovyan/work       # Monta la carpeta del proyecto
     environment:
-      - JUPYTER_TOKEN=            # Desactiva token de acceso
-      - JUPYTER_PASSWORD=         # Desactiva contraseña
-      - JUPYTER_ALLOW_INSECURE_WRITES=true  # Permite escritura en volúmenes montados
-      - DISPLAY=:99               # Pantalla virtual usada por el entorno gráfico
+      - JUPYTER_TOKEN=            
+      - JUPYTER_PASSWORD=         
+      - JUPYTER_ALLOW_INSECURE_WRITES=true  
+      - DISPLAY=:99               
+      - JUPYTER_ENABLE_LAB=yes
+    shm_size: "2gb"               
+    restart: always
+    dns:
+      - 8.8.8.8
+    networks:
+      - realestate_net
 
-    shm_size: "2gb"               # Evita fallos del navegador por poca memoria compartida
-
-  # Contenedor de base de datos MongoDB
-  database:
-    image: mongo:latest
-    container_name: bigdata_mongodb
-
-    ports:
-      - "27017:27017"             # Puerto de MongoDB
-
-    volumes:
-      - mongo_data:/data/db       # Guarda los datos de forma persistente
-      
-    # EL SERVICIO QUE FALTA PARA EL PUERTO 8081
-  admin-db:
+  # Interfaz web para visualizar MongoDB ATLAS de forma SEGURA
+  realestate_ui_atlas:
     image: mongo-express:latest
-    container_name: bigdata_ui
+    container_name: realestate_ui_atlas
     restart: always
     ports:
-      - "8081:8081"
+      - "8082:8081"
     environment:
-      # Se conecta al servicio 'database' definido arriba
-      - ME_CONFIG_MONGODB_URL=mongodb://database:27017/
-    depends_on:
-      - database
-      
-# Volumen persistente para MongoDB
->>>>>>> main
-volumes:
-  mongo_data:
+      # Extrae la URL directamente del .env mapeado para no dejar contraseñas en texto plano
+      - ME_CONFIG_MONGODB_URL=${MONGO_URI}
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+    dns:
+      - 8.8.8.8
+    networks:
+      - realestate_net
+
+  # Explorador de archivos del proyecto desde el navegador
+  realestate_filebrowser:
+    image: filebrowser/filebrowser
+    container_name: realestate_filebrowser
+    restart: always
+    ports:
+      - "8083:80"
+    volumes:
+      - .:/srv
+    networks:
+      - realestate_net
+
+networks:
+  realestate_net:
+    driver: bridge
+    name: RealEstate_Network

@@ -1,0 +1,18 @@
+# Archivos de control del sistema del contenedor
+supervisord.log
+supervisord.pid
+
+# Credenciales y Variables de Entorno
+.env
+.env.local
+.env.*.local
+
+# Archivos temporales e historiales de Jupyter Notebook
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+.virtualenv/
+
+# Carpetas del sistema operativo y Docker local
+.docker/
+.DS_Store
+Thumbs.db

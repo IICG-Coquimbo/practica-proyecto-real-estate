@@ -1,57 +1,86 @@
 services:
-  workspace:
-    build: .
-    container_name: BigData_workspace
-    ports:
-      - "8888:8888"   # Jupyter Lab
-      - "6080:6080"   # Visualizador del Scraper (VNC)
-      - "4040:4040"   # Spark UI
+  # ==========================================
+  # CONTENEDOR A: Scraper / Raw Data (Fase 1)
+  # ==========================================
+  realestate_scraper:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: realestate_scraper
+    platform: linux/amd64
+    profiles:                # <--- AÑADE ESTO
+      - "extraccion"         # <--- AÑADE ESTO
+    env_file:
+      - .env  # Inyección segura de credenciales de Atlas
     volumes:
       - .:/home/jovyan/work
+    command: python /home/jovyan/work/main.py  # Ejecuta la extracción automática
+    shm_size: "2gb"  # Previene fallos si usan Selenium
+    restart: on-failure
+    dns:
+      - 8.8.8.8
+    networks:
+      - realestate_net
+
+  # ==========================================
+  # CONTENEDOR B: Processor & Workspace (Fase 2 - Tu Entorno)
+  # ==========================================
+  realestate_workspace:
+    build: .                      
+    container_name: realestate_workspace
+    platform: linux/amd64
+    env_file:
+      - .env  # Inyección segura de variables de entorno para tu EDA
+    ports:
+      - "8888:8888"               # Jupyter Lab
+      - "4040:4040"               # Interfaz web de Spark
+      - "5900:5900"               # Acceso VNC al escritorio
+      - "6080:6080"               # Acceso noVNC desde navegador
+      - "8501:8501"               # Acceso Streamlit
+    volumes:
+      - .:/home/jovyan/work       # Monta la carpeta del proyecto
     environment:
+      - JUPYTER_TOKEN=            
+      - JUPYTER_PASSWORD=         
+      - JUPYTER_ALLOW_INSECURE_WRITES=true  
+      - DISPLAY=:99               
       - JUPYTER_ENABLE_LAB=yes
+    shm_size: "2gb"               
+    restart: always
     dns:
       - 8.8.8.8
-    user: root
-    restart: always
     networks:
-      - bigdata_net
+      - realestate_net
 
-  mongodb:
-    image: mongo:6
-    container_name: BigData_MongoDB
-    ports:
-      - "27017:27017"
+  # Interfaz web para visualizar MongoDB ATLAS de forma SEGURA
+  realestate_ui_atlas:
+    image: mongo-express:latest
+    container_name: realestate_ui_atlas
     restart: always
-    networks:
-      - bigdata_net
-  visualizer:
-    image: mongo-express
-    container_name: BigData_Visualizer
     ports:
-      - "8081:8081"   # Mongo Express
+      - "8082:8081"
     environment:
-      - ME_CONFIG_MONGODB_URL=mongodb+srv://bd_realestate:abc123456@c-realestate.xyfip8o.mongodb.net/?retryWrites=true&w=majority
+      # Extrae la URL directamente del .env mapeado para no dejar contraseñas en texto plano
+      - ME_CONFIG_MONGODB_URL=${MONGO_URI}
       - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
-      - VC_NODE_TLS_REJECT_UNAUTHORIZED=0
     dns:
       - 8.8.8.8
-    restart: always
     networks:
-      - bigdata_net
+      - realestate_net
 
-  filebrowser:
+  # Explorador de archivos del proyecto desde el navegador
+  realestate_filebrowser:
     image: filebrowser/filebrowser
-    container_name: BigData_FileBrowser
+    container_name: realestate_filebrowser
+    restart: always
     ports:
-      - "8082:80"     # Gestor de archivos
+      - "8083:80"
     volumes:
       - .:/srv
-    restart: always
     networks:
-      - bigdata_net
+      - realestate_net
 
 networks:
-  bigdata_net:
+  realestate_net:
     driver: bridge
-    name: BigData_Network_UCN
+    name: RealEstate_Network
